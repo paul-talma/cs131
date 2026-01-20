@@ -1,0 +1,7 @@
+The only questions requiring elaboration are Questions 5, 7, and 9.
+For question 5, we decided that the function could be trivially implemented. The function is well-typed (type: 'a list -> bool) and returns the correct value (false) on all inputs. This works because sets containing themselves do not exist (are not well-typed).
+
+For question 7, we initially defined a predicate `is_periodic_point eq f p x` that checked whether applying `f` to `x` `p`-times was `eq` to `x`. We then recursively applied this predicate to `x`, `f x`, `f f x`, etc. However, this resulted in needless computation (for example, if `p = 5`, then we'd compute `f f f x` three times).
+In light of these considerations, we changed strategy: we defined `y` to be `f` applied to `x` `p` times. We then compared `x` and `y` using `eq`; if not equal, we recursively compare `f x` and `f y` until we find a fixed point or diverge.
+
+For question 9, we initially tried a "top-down" approach, starting from the grammar root and trying to derive all the "safe" rules. However, we couldn't make this work and so decided on a bottom-up approach, according to which we maintain a set of "proven non-blind" rules which we recursively grow. The answer is then the computed fixedpoint of this rule-set-growing function.
