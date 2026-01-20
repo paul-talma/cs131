@@ -22,17 +22,19 @@ let self_member s = false
 let rec computed_fixed_point eq f x =
   if eq (f x) x then x else computed_fixed_point eq f (f x)
 
+(* Question 7 *)
 let apply_n_times f n =
   let rec aux i acc =
     if i <= 0 then acc else aux (i - 1) (fun x -> f (acc x))
   in
   aux n (fun x -> x)
 
-let is_periodic_point eq f p x = eq x (apply_n_times f p x)
-
-(* Question 7 *)
-let rec computed_periodic_point eq f p x =
-  if is_periodic_point eq f p x then x else computed_periodic_point eq f p (f x)
+let computed_periodic_point eq f p x =
+  let y = apply_n_times f p x in
+  let rec find_periodic_point a b =
+    if eq a b then a else find_periodic_point (f a) (f b)
+  in
+  find_periodic_point x y
 
 (* Question 8 *)
 let rec whileseq s p x = if not (p x) then [] else x :: whileseq s p (s x)
