@@ -32,6 +32,7 @@ let my_whileseq_test1 =
 
 type my_grammar_nonterminals = Expr | Val
 
+(* test grammar 0: inaccessible blind alley -> should be filtered out *)
 let my_grammar_rules0 =
   [
     Expr, [ N Expr; T "+"; N Expr ];
@@ -52,11 +53,18 @@ let my_filter_blind_alleys_test0 =
         Val, [T"3"]]
     )
 
+(* test grammar 1: accessible blind alley, inaccessible non-blind alleys -> should filter out the blind alley and keep the rest *)
 let my_grammar1 = (Expr, my_grammar_rules0)
 let my_filter_blind_alleys_test1 =
   filter_blind_alleys my_grammar1
-  = (Expr, [ ])
+  = (Expr,
+        [Val, [T"0"];
+        Val, [T"1"];
+        Val, [T"2"];
+        Val, [T"3"]]
+)
 
+(* test grammar 2: circular rules, all blind alleys -> should return [] *)
 let my_grammar_rules2 =
     [Expr, [ N Val; N Val ];
      Val, [ N Expr; N Expr ]]
@@ -65,6 +73,7 @@ let my_grammar2 = (Val, my_grammar_rules2)
 let my_filter_blind_alleys_test2 =
   filter_blind_alleys my_grammar2 = (Val, [])
 
+(* test grammar 3: empty rules -> should return [] *)
 let my_grammar_rules3 = []
 let my_grammar3 = (Val, my_grammar_rules3)
 let my_filter_blind_alleys_test3 = filter_blind_alleys my_grammar3 = my_grammar3
