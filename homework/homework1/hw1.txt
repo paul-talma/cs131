@@ -1,3 +1,5 @@
+Report:
+
 The only questions requiring elaboration are Questions 5, 7, and 9.
 For question 5, we decided that the function could be trivially implemented. The function is well-typed (type: 'a list -> bool) and returns the correct value (false) on all inputs. This works because sets containing themselves do not exist (are not well-typed).
 
@@ -5,3 +7,43 @@ For question 7, we initially defined a predicate `is_periodic_point eq f p x` th
 In light of these considerations, we changed strategy: we defined `y` to be `f` applied to `x` `p` times. We then compared `x` and `y` using `eq`; if not equal, we recursively compare `f x` and `f y` until we find a fixed point or diverge.
 
 For question 9, we initially tried a "top-down" approach, starting from the grammar root and trying to derive all the "safe" rules. However, we couldn't make this work and so decided on a bottom-up approach, according to which we maintain a set of "proven non-blind" rules which we recursively grow. The answer is then the computed fixedpoint of this rule-set-growing function.
+
+Note that our solution to question 9 is insensitive to the root of the grammar. That is, if a rule cannot be reached from the root, but if it were reached, could produce a string of terminals would not count as a blind alley and would not be eliminated by our algorithm.
+
+Appendix:
+
+I made limited use of generative AI to complete this assignment. I asked general language-related questions like 
+```
+i have an ocaml variant type ('a, 'b) symbol = N of 'a | T of 'b. How can I check whether a given object is N or Y?
+```
+and got answers of the sort
+```
+By pattern matching.
+
+Given x : ('a, 'b) symbol:
+match x with
+| N _ -> true
+| T _ -> false
+or, if you want a predicate:
+let is_N = function
+  | N _ -> true
+  | T _ -> false
+If you need to branch on it rather than return a boolean, use the same pattern match directly.
+```
+Another example: I asked
+```
+does ocaml have an equivalent of python's pass?
+```
+and got answer
+```
+()
+The unit value. It's an expression that does nothing and has type unit.
+Usage:
+let f x = 
+  if x > 0 then
+    print_endline "positive"
+  else
+    ()
+Unlike Python's pass (which is syntactic), () is an actual value. But it serves the same purpose—a no-op placeholder.
+```
+I did not ask generative AI for answers (or partial answers) to homework questions.
