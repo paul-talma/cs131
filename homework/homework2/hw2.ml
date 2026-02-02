@@ -1,5 +1,6 @@
 (* Question 1 *)
 
+(* Sorts the rules based on the non-terminal symbol *)
 let sort_rules rules = List.sort (fun x y -> Stdlib.compare (fst x) (fst y)) rules
 
 (* returns a list of key-value pairs where keys are nonterminal symbols
@@ -45,6 +46,7 @@ type ('nonterminal, 'terminal) parse_tree =
   | Node of 'nonterminal * ('nonterminal, 'terminal) parse_tree list
   | Leaf of 'terminal
 
+(* Traverses the parse tree left-to-right to yield the list of leaves *)
 let parse_tree_leaves tree =
   let rec aux acc = function
     | Leaf t -> t :: acc
@@ -58,17 +60,20 @@ type ('nonterminal, 'terminal) symbol =
   | N of 'nonterminal
   | T of 'terminal
 
+(* Checks if the first element of the fragment matches the terminal *)
 let parse_terminal t frag accept =
   match frag with
   | [] -> None
   | x :: tail -> if x = t then accept (Leaf x) tail else None
 ;;
 
+(* Dispatches to parse_terminal or parse_nonterminal based on the symbol type *)
 let rec parse_symbol prod_func s frag accept =
   match s with
   | T t -> parse_terminal t frag accept
   | N nt -> parse_nonterminal prod_func nt accept frag
 
+(* Attempts to match one of the production rules for the non-terminal *)
 and parse_nonterminal prod_func nt accept frag =
   let rules = prod_func nt |> correct_prod_func in
   let rec try_rules = function
@@ -83,6 +88,7 @@ and parse_nonterminal prod_func nt accept frag =
   in
   try_rules rules
 
+(* Matches a sequence of symbols (a rule) against the fragment *)
 and parse_rule prod_func rule frag accept =
   match rule with
   | [] -> accept [] frag
@@ -92,18 +98,23 @@ and parse_rule prod_func rule frag accept =
         accept (tree_node :: node_list) suffix'))
 ;;
 
+(* An acceptor that succeeds only if the remaining suffix is empty *)
 let accept_empty_suffix tree = function
   | [] -> Some tree
   | _ -> None
 ;;
 
+(* Creates a parser for the given grammar *)
 let make_parser (start_symbol, prod_func) =
   parse_nonterminal prod_func start_symbol accept_empty_suffix
 ;;
 
 (* Question 3 *)
+
+(* Wraps a matcher's acceptor to be compatible with the parser's acceptor signature *)
 let wrap_acceptor matcher_accept = fun tree -> matcher_accept
 
+(* Creates a matcher for the given grammar *)
 let make_matcher (start_symbol, prod_func) =
   fun accept -> parse_nonterminal prod_func start_symbol (wrap_acceptor accept)
 ;;

@@ -1,0 +1,28 @@
+I began by writing `make_matcher`.
+Once that was implemented, I followed the hints and implemented `make_parser` in a similar way.
+I was able to reuse most of my code for `make_matcher`.
+The only difference concerned the behavior of the acceptors, which now needed to accept trees as well as fragments in order to propagate the parse tree.
+It took me a while to wrap my head around the proper way to propagate trees.
+Once the parser generator was implemented, I realized that it should be possible to use it to implement the matcher generator, preventing a lot of code duplication.
+
+The key idea is that the parser traverses the input in the same way as the matcher, with two differences: the parser returns an optional parse tree, rather than an optional fragment, and the acceptors within the parser take a tree as argument.
+Getting the parser to return a fragment instead of a tree was simple: since the return type is dictated by the acceptor passed to the top level parser, it suffices to pass an acceptor that returns fragments instead of trees.
+Resolving the type mismatch (parser acceptors have signature `tree -> fragment -> result`, whereas matcher acceptors have signature `fragment -> result`) required a wrapper function that converts a matcher acceptor to a parser acceptor by simply ignoring the tree input and returning the fragment.
+This allowed me to define `make_matcher` in just a few lines of code, treating it as a parser that simply discards the output tree.
+
+My implementation has a few notable weaknesses in the context of a general-purpose parser.
+The most significant is that it cannot handle left-recursive grammars.
+Because the parser is a recursive descent parser that expands the leftmost symbol first, a rule of the form `Symbol -> Symbol ...` results in infinite recursion.
+The parser attempts to expand `Symbol` repeatedly, without consuming any further tokens.
+I confirmed this limitation by testing against a simple left-recursive grammar; interestingly the OCaml utop did not crash due to a stack overflow but instead hung for as long as I was willing to wait.
+This weakness limits the parser's utility, as many natural grammars (like those for arithmetic expressions) are intuitive to write with left recursion.
+
+Another limitation is the lack of error reporting.
+The parser returns `None` upon failure without providing any context.
+This does not impact the correctness of the parser, but makes it more difficult to use.
+A more useful signal would include information about, e.g. the kind of token that was expected or the position at which the failure occurred. 
+The lack of error messages makes debugging grammars or inputs difficult for the user.
+
+Finally, the parser is sensitive to the order of rules in the grammar.
+In cases of ambiguity, it prioritizes the first matching rule found in the list.
+This may not be undesirable (after all, we need some way of encoding rule precedence) but could make the parser brittle.
