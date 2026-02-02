@@ -77,12 +77,6 @@ let rec my_fold_right f list init =
   | h :: t -> f h (my_fold_right f t init)
 ;;
 
-(*
-foldl f init [x1; x2; x3; ...; xn] = f (... (f (f init x1) x2) ... ) xn
-
-foldr f [x1;x2;...;xn] init = f x1 (f x2 (f ... (f xn init)))
-*)
-
 let my_map_fold f list = my_fold_right (fun e acc -> f e :: acc) list []
 
 let rec my_rev_append l1 l2 =
@@ -132,34 +126,168 @@ let rec my_combine l1 l2 =
   match l1, l2 with
   | [], [] -> []
   | h1 :: t1, h2 :: t2 -> (h1, h2) :: my_combine t1 t2
-  | _, _ -> raise (Invalid_argument "lists must have the same lenght")
+  | _, _ -> raise (Invalid_argument "lists must have the same length")
 ;;
 
-(* tests *)
-let my_map_tail_test0 = my_map_tail (fun x -> x * x) [ 1; 2; 3 ] = [ 1; 4; 9 ]
-let my_fold_left_test0 = my_fold_left (fun acc x -> acc - x) 10 [ 1; 2; 3 ] = 4
-let my_fold_right_test0 = my_fold_right (fun x acc -> x - acc) [ 1; 2; 3 ] 10 = -8
-let my_map_fold_test0 = my_map_fold (fun x -> x * x) [ 2; 3; 4 ] = [ 4; 9; 16 ]
-let my_rev_append_test0 = my_rev_append [ 1; 2; 3 ] [ 4; 5; 6 ] = [ 3; 2; 1; 4; 5; 6 ]
-
-let my_concat_map_tail_test0 =
-  my_concat_map (fun x -> [ x; x; x ]) [ 1; 2; 3 ] = [ 1; 1; 1; 2; 2; 2; 3; 3; 3 ]
+(* eliminate consequtive duplicates *)
+let rec compress = function
+  | x :: (y :: _ as t) -> if x = y then compress t else x :: compress t
+  | x -> x
 ;;
 
-let my_map_concat_test0 = my_map_concat (fun x -> x * x) [ 2; 3; 4 ] = [ 4; 9; 16 ]
-let my_concat_test = my_concat [ [ 1; 2; 3 ]; [ 7; 8; 9 ] ] = [ 1; 2; 3; 7; 8; 9 ]
-
-let my_filter_concat_map_test0 =
-  my_filter_concat_map (fun x -> x < 10) [ 1; 2; 3; 66; 55; 4 ] = [ 1; 2; 3; 4 ]
+(* pack consequtive duplicates *)
+let pack list =
+  let rec aux packs curr_pack = function
+    | [] -> []
+    | [ x ] -> (x :: curr_pack) :: packs
+    | a :: (b :: _ as t) ->
+      if a = b then aux packs (a :: curr_pack) t else aux ((a :: curr_pack) :: packs) [] t
+  in
+  List.rev (aux [] [] list)
 ;;
 
-let my_exists_test0 = my_exists (fun x -> x = 10) [ 1; 2; 3 ] = false
-let my_exists_fold_test0 = my_exists_fold (fun x -> x = 10) [ 1; 2; 3 ] = false
-let my_find_opt_test0 = my_find_opt (fun x -> x = 10) [ 1; 2; 3 ] = None
-let my_find_opt_fold_test0 = my_find_opt_fold (fun x -> x = 10) [ 1; 2; 3 ] = None
-
-let my_partition_test0 =
-  my_partition (fun x -> x mod 2 = 0) [ 1; 2; 3; 4; 5; 6 ] = ([ 2; 4; 6 ], [ 1; 3; 5 ])
+(* run length encoding *)
+let encode list =
+  let rec aux acc count = function
+    | [] -> []
+    | [ x ] -> (count + 1, x) :: acc
+    | a :: (b :: _ as t) ->
+      if a = b then aux acc (count + 1) t else aux ((count + 1, a) :: acc) 0 t
+  in
+  List.rev (aux [] 0 list)
 ;;
 
-let my_combine_text0 = my_combine [ 1; 2; 3 ] [ 4; 5; 6 ] = [ 1, 4; 2, 5; 3, 6 ]
+(* modified RLE *)
+type 'a rle =
+  | One of 'a
+  | Many of int * 'a
+
+let mod_encode list =
+  let elem (count, e) = if count = 1 then One e else Many (count, e) in
+  let rec aux acc count = function
+    | [] -> []
+    | [ x ] -> elem (count + 1, x) :: acc
+    | a :: (b :: _ as t) ->
+      if a = b then aux acc (count + 1) t else aux (elem (count + 1, a) :: acc) 0 t
+  in
+  List.rev (aux [] 0 list)
+;;
+
+(* binary tree *)
+type 'a binary_tree =
+  | Empty
+  | Node of 'a * 'a binary_tree * 'a binary_tree
+
+let rec is_mirror t1 t2 =
+  match t1, t2 with
+  | Empty, Empty -> true
+  | Empty, _ | _, Empty -> false
+  | Node (_, l1, r1), Node (_, l2, r2) -> is_mirror l1 r2 && is_mirror l2 r1
+;;
+
+let test_is_mirror =
+  is_mirror
+    (Node (1, Node (2, Empty, Empty), Node (5, Empty, Empty)))
+    (Node (1, Node (2, Node (3, Empty, Empty), Empty), Node (4, Empty, Empty)))
+  = false
+;;
+
+let is_symmetric = function
+  | Empty -> true
+  | Node (_, l, r) -> is_mirror l r
+;;
+
+(* BSTs *)
+let rec insert tree x =
+  match tree with
+  | Empty -> Node (x, Empty, Empty)
+  | Node (y, l, r) ->
+    if x = y
+    then tree
+    else if x < y
+    then Node (y, insert l x, r)
+    else Node (y, l, insert r x)
+;;
+
+let construct ls = List.fold_left insert Empty ls
+let symm_test0 = is_symmetric (construct [ 5; 3; 18; 1; 4; 12; 21 ])
+let symm_test1 = not (is_symmetric (construct [ 3; 2; 5; 7; 4 ]))
+
+let count_leaves tree =
+  let rec aux count = function
+    | Node (_, Empty, Empty) -> count + 1
+    | Node (_, l, r) -> aux count l + aux count r
+    | Empty -> 0
+  in
+  aux 0 tree
+;;
+
+let count_test =
+  count_leaves (Node (1, Node (1, Empty, Empty), Node (2, Node (3, Empty, Empty), Empty)))
+  = 2
+;;
+
+let collect_leaves tree =
+  let rec aux t acc =
+    match t with
+    | Empty -> acc
+    | Node (x, Empty, Empty) -> x :: acc
+    | Node (_, l, r) -> aux l (aux r acc)
+  in
+  aux tree []
+;;
+
+let collect_test =
+  collect_leaves
+    (Node (1, Node (1, Empty, Empty), Node (2, Node (3, Empty, Empty), Empty)))
+  = [ 1; 3 ]
+;;
+
+let internals tree =
+  let rec aux t acc =
+    match t with
+    | Empty -> acc
+    | Node (_, Empty, Empty) -> acc
+    | Node (x, l, r) -> aux l (x :: aux r acc)
+  in
+  aux tree []
+;;
+
+let internals_test =
+  internals (Node (1, Node (1, Empty, Empty), Node (2, Node (3, Empty, Empty), Empty)))
+;;
+
+let at_level t l =
+  let rec aux tree level acc =
+    match tree with
+    | Empty -> acc
+    | Node (x, left, right) ->
+      if level = 1 then x :: acc else aux left (level - 1) (aux right (level - 1) acc)
+  in
+  aux t l []
+;;
+
+let at_level_test =
+  at_level
+    (Node
+       ( 'a'
+       , Node ('b', Node ('d', Empty, Empty), Node ('e', Empty, Empty))
+       , Node ('c', Empty, Node ('f', Node ('g', Empty, Empty), Empty)) ))
+    2
+;;
+
+type ('nonterminal, 'terminal) parse_tree =
+  | Node of 'nonterminal * ('nonterminal, 'terminal) parse_tree list
+  | Leaf of 'terminal
+
+let parse_tree_leaves tree =
+  let rec aux acc = function
+    | Leaf t -> t :: acc
+    | Node (n, ls) -> List.fold_left aux acc ls
+  in
+  List.rev (aux [] tree)
+;;
+
+let parse_leaves_test =
+  parse_tree_leaves (Node (1, [ Node (2, [ Leaf 3; Leaf 4 ]) ])) = [ 3; 4 ]
+;;
