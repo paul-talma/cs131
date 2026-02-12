@@ -3,3 +3,7 @@ _build/
 a.out
 *.c
 lecture_notes.md
+.DS_Store
+midterm/
+slides/
+worksheets/
