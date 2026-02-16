@@ -1,0 +1,152 @@
+\documentclass[11pt]{article}
+
+% Change "review" to "final" to generate the final (sometimes called camera-ready) version.
+% Change to "preprint" to generate a non-anonymous version with page numbers.
+\usepackage{acl}
+
+% Standard package includes
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{booktabs}
+
+% For proper rendering and hyphenation of words containing Latin characters (including in bib files)
+\usepackage[T1]{fontenc}
+
+% This assumes your files are encoded as UTF8
+\usepackage[utf8]{inputenc}
+
+% This is not strictly necessary, and may be commented out,
+% but it will improve the layout of the manuscript,
+% and will typically save some space.
+% \usepackage{microtype}
+
+% This is also not strictly necessary, and may be commented out.
+% However, it will improve the aesthetics of text in
+% the typewriter font.
+\usepackage{inconsolata}
+
+%Including images in your LaTeX document requires adding
+%additional package(s)
+\usepackage{graphicx}
+
+% If the title and author information does not fit in the area allocated, uncomment the following
+%
+%\setlength\titlebox{<dim>}
+%
+% and set <dim> to something 5cm or larger.
+
+\title{CS 131 Homework 3 Report}
+
+
+\author{Paul Talma \\
+  UCLA \\
+  \texttt{paultalma@ucla.edu}}
+
+
+\begin{document}
+\maketitle
+
+\section{Approach}
+
+In order to automate testing and data collection, we defined a new class, \texttt{PerformanceTest.java}.
+This class defines the variables we wish to vary before running tests on all combinations of the variables.
+The results of the tests are automatically logged to a \texttt{.csv} file, for ease of analysis.
+
+We considered the following values for each of the variables:
+
+\begin{center}
+\begin{small}
+    \begin{tabular}{l l}
+        \toprule
+        \textbf{Variable} & \textbf{Values}\\
+        \midrule{}
+        \texttt{array\_size} & 5, 10, 20, 40, 60, 80, 100, 130\\
+        \texttt{num\_threads} & 1, 8, 16, 32, 40\\
+        \texttt{state\_types} & Null, Synchronized, Unsynchronized\\
+        \texttt{thread\_type} & Platform, Virtual\\
+       \bottomrule{} 
+    \end{tabular}
+\end{small}
+\end{center}
+\texttt{nTransitions} was fixed at $100,000,000$, as per the spec.
+In addition, for each combination of variables, we ran the test harness three times and averaged the results to smooth out some of the noise.
+We carried out our experiments on \texttt{lnxsrv11} and on our personal machine (Apple M2), obtaining qualitatively similar results.
+The results reported here were obtained on the Linux machine.
+
+\subsection{AcmeSafe Implementation}
+
+We chose to implement our \texttt{AcmeSafe} class using the \texttt{java.util.concurrent.atomic} package.
+This package provides classes that support atomic read and write operations, ensuring thread-safe access to variables without resorting to locks.
+To implements \texttt{AcmeSafe}, we use the \texttt{AtomicLongArray} class, calling \texttt{getAndDecrement}/\texttt{getAndIncrement} to update the array.
+
+\section{Results}
+To decrease clutter, we omit results for the \texttt{Null} class from the graphs.
+In each case, the \texttt{Null} class took the least amount of time and produced an array sum of 0, as expected.
+\subsection{Performance}
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{time_threads_5_300.png}
+  \caption{Total time vs. number of threads, with an array size of 300. Solid lines indicate platform threads; dashed lines, virtual threads.}
+  \label{fig:time_threads_5_300}
+\end{figure*}
+As we can see in Figure \ref{fig:time_threads_5_300}, the \texttt{Unsynchronized} class performs much better than the \texttt{Synchronized} class.
+On small arrays (size 5), the \texttt{AcmeSafe} class performs worse than the other two, while on larger arrays (size 100), its performance is close to that of the \texttt{Unsynchronized} class.
+The performance profile of the synchronized approach is unsurprising: as the number of threads increases, the opportunities for lock contention increase, and hence the time taken does too.
+By contrast, increasing the number of threads does not significantly impact the performance of the \texttt{Unsynchronized} class.
+The AcmeSafe approach sits somewhere in between: on a small array, it must deal with more lock contention and hence takes more time as the number of threads increases.
+On a longer array, the atomic operations are less likely to collide, taking greater advantage of the parallelism.
+Note that the performance of the virtual threads is generally better than that of the platform threads.
+
+\begin{figure*}[h]
+    \centering
+    \includegraphics[width=\textwidth]{avg_time_threads_5_300.png}
+    \caption{Average time per swap vs. number of threads, with an array size of 300.}
+    \label{fig:avg_time_threads_5_300}
+\end{figure*}
+Figure \ref{fig:avg_time_threads_5_300} provides more insight into the performance of the different approaches.
+We see that increasing the number of threads results in a modest increase in average time-per-swap for the \texttt{Unsynchronized} class and a slightly greater increase for the \texttt{AcmeSafe} class.
+By contrast, increasing the thread count results in a large increase in average time-per-swap for the \texttt{Synchronized} class.
+This is to be expected, since a greater number of threads increases the chances of a lock contention, and hence of a slowdown, in the synchronized implementation.
+This is also true for the AcmeSafe approach, but since collisions are less costly (the CPU spins instead of blocking a whole thread), the effect is less pronounced.
+
+\subsection{Correctness}
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{array_sum_5_300.png}
+    \caption{Array sum vs. number of threads, with arrays of size 5 and 300.}
+    \label{fig:array_sum_5_300}
+\end{figure*}
+
+Figure \ref{fig:array_sum_5_300} displays the array sum results for arrays of size 5 and 300.
+As expected, the AcmeSafe and the synchronized approaches result in an array sum of 0, reflecting correctness (on this particular task; the atomic approach could fail to be correct on more complex tasks).
+By contrast, the unsynchronized approach yields incorrect results.
+As expected, the results are far worse in the short array case, since race conditions, and hence incorrectness, are much more likely on a small array.
+
+\section{Summary}
+
+The best approach will depend on the relative importance of performance and correctness, as well as on the nature of the data being processed.
+In almost every case, virtual threads provide a performance advantage over platform threads.
+While the data is not very conclusive, it seems like they do not incur a large correctness cost, as compared to platform threads (and we cannot think of a reason why they would).
+Thus, virtual threads should be preferred in every case.
+
+If correctness is paramount and the arrays are small, then then synchronized approach is best, as it offers better performance than the atomic approach on small arrays.
+The reverse is the case for large arrays.
+
+If performance is paramount, then the unsynchronized approach is best, although it suffers large correctness issues on small arrays.
+
+
+%TODO:
+% discuss differences between platform and virtual
+% references to materials
+% total time for small array
+% tried to have separate config file but too complicated
+% incorporate acme safe state
+% discuss subtleties of user vs cpu time
+
+% Bibliography entries for the entire Anthology, followed by custom entries
+%\bibliography{custom,anthology-overleaf-1,anthology-overleaf-2}
+
+% Custom bibliography entries only
+
+
+\end{document}

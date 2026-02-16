@@ -15,8 +15,7 @@ class UnsafeMemory {
       if (args[2].equals("Null")) s = new NullState(nValues);
       else if (args[2].equals("Synchronized")) s = new SynchronizedState(nValues);
       else if (args[2].equals("Unsynchronized")) s = new UnsynchronizedState(nValues);
-      // else if (args[1].equals("AcmeSafe"))
-      // s = new AcmeSafeState(nValues);
+      else if (args[2].equals("AcmeSafe")) s = new AcmeSafeState(nValues);
       else throw new Exception(args[2]);
 
       var nThreads = (int) argInt(args[3], 1, Integer.MAX_VALUE);

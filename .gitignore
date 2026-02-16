@@ -7,3 +7,6 @@ lecture_notes.md
 midterm/
 slides/
 worksheets/
+profiling/
+.settings
+*.jar

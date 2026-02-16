@@ -16,8 +16,8 @@ compile:
 run: compile
 	java -cp $(BIN_DIR) $(MAIN_CLASS) $(ARGS)
 
-time: compile
-	time java -cp $(BIN_DIR) $(MAIN_CLASS) $(ARGS)
+# time: compile
+# 	time java -cp $(BIN_DIR) $(MAIN_CLASS) $(ARGS)
 
 perf: compile
 	java -cp $(BIN_DIR) $(PERF_CLASS)
@@ -26,3 +26,5 @@ jar: compile
 	mkdir -p $(DIST_DIR)
 	jar cfe $(DIST_DIR)/$(JAR_NAME) $(MAIN_CLASS) -C $(BIN_DIR) .
 
+clean:
+	rm -rf $(BIN_DIR)
