@@ -10,3 +10,7 @@ worksheets/
 profiling/
 .settings
 *.jar
+
+assignment_guides/
+cs131_nachenberg/
+conjure-log*
