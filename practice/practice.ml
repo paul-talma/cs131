@@ -291,3 +291,31 @@ let parse_tree_leaves tree =
 let parse_leaves_test =
   parse_tree_leaves (Node (1, [ Node (2, [ Leaf 3; Leaf 4 ]) ])) = [ 3; 4 ]
 ;;
+
+let revodd list =
+  let rec aux pos acc = function
+    | [] -> acc
+    | (a, b) :: rest ->
+      if pos mod 2 = 0
+      then aux (pos + 1) ((b, a) :: acc) rest
+      else aux (pos + 1) ((a, b) :: acc) rest
+  in
+  let rec rev acc = function
+    | [] -> acc
+    | x :: xs -> rev (x :: acc) xs
+  in
+  rev [] (aux 0 [] list)
+;;
+
+let reveven list =
+  match list with
+  | [] -> []
+  | pair :: rest ->
+    (match revodd (pair :: list) with
+     | p :: other -> other)
+;;
+
+let test1 = revodd [ 1, 2; 3, 4; 5, 6; 7, 8; 9, 10 ]
+let test1 = reveven [ 1, 2; 3, 4; 5, 6; 7, 8; 9, 10 ]
+let invcheck f x = f (f x) = x
+let test3 = invcheck revodd [ 1, 2; 3, 4; 5, 6; 7, 8 ]

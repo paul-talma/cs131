@@ -66,20 +66,15 @@ all_diff([H|T]) :-
 	\+(member(H, T)),
 	all_diff(T).
 
-testcase(N, C) :-
-	N = 5,
-    C = counts([5,3,3,2,1],
-               [1,2,3,3,2],
-               [5,3,3,2,1],
-               [1,2,2,3,2]),
-    !.
+testcase(N) :-
+	N = 5.
 
 speedup(Ratio) :-
-	testcase(N, C),
+	testcase(N),
 	statistics(cpu_time, [_,_]),
-	ntower(N, T1, C),
+	ntower(N, T1, C1),
 	statistics(cpu_time, [_,R1]),
-	plain_ntower(N, T2, C),
+	plain_ntower(N, T2, C2),
 	statistics(cpu_time, [_,R2]),
 	Ratio is R2 / R1.
 
@@ -88,3 +83,4 @@ ambiguous(N, C, T1, T2) :-
     ntower(N, T2, C), 
     T1 \= T2,
     !.
+
