@@ -1,0 +1,223 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated as
+% required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+\datalist[entry]{none/global//global/global}
+  \entry{grepManPage}{manual}{}
+    \name{author}{1}{}{%
+      {{hash=FFS}{%
+         family={Foundation},
+         familyi={F\bibinitperiod},
+         given={Free\bibnamedelima Software},
+         giveni={F\bibinitperiod\bibinitdelim S\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{FFS1}
+    \strng{fullhash}{FFS1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{\texttt{man grep}}
+    \field{title}{grep(1) -- GNU grep manual}
+    \field{year}{2023}
+  \endentry
+
+  \entry{gallantRipgrepBlog}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=GA}{%
+         family={Gallant},
+         familyi={G\bibinitperiod},
+         given={Andrew},
+         giveni={A\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{GA1}
+    \strng{fullhash}{GA1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{https://burntsushi.net/ripgrep}
+    \field{title}{Ripgrep Is Faster than \textbraceleft grep, Ag, Git Grep, Ucg, Pt, Sift\textbraceright}
+    \verb{file}
+    \verb /Users/paultalma/Zotero/storage/FQ6F8DBG/ripgrep.html
+    \endverb
+    \field{type}{Blog}
+    \field{journaltitle}{Andrew Gallant's Blog}
+    \field{year}{2016}
+    \field{urlday}{10}
+    \field{urlmonth}{03}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{walkdir}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=B}{%
+         family={BurntSushi},
+         familyi={B\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {GitHub}%
+    }
+    \strng{namehash}{B1}
+    \strng{fullhash}{B1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://github.com/BurntSushi/walkdir}}
+    \field{title}{walkdir}
+    \field{journaltitle}{GitHub repository}
+    \field{year}{2026}
+  \endentry
+
+  \entry{deque}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=k}{%
+         family={kinghajj},
+         familyi={k\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {GitHub}%
+    }
+    \strng{namehash}{k1}
+    \strng{fullhash}{k1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://github.com/kindhajj/deque}}
+    \field{title}{deque}
+    \field{journaltitle}{GitHub repository}
+    \field{year}{2026}
+  \endentry
+
+  \entry{claude}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=A}{%
+         family={Anthropic},
+         familyi={A\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{A1}
+    \strng{fullhash}{A1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://www.anthropic.com/news/claude-sonnet-4-6}}
+    \field{title}{Claude Sonnet 4.6}
+    \field{year}{2026}
+  \endentry
+
+  \entry{memmap}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=R}{%
+         family={RazrFalcon},
+         familyi={R\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {GitHub}%
+    }
+    \strng{namehash}{R1}
+    \strng{fullhash}{R1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://github.com/RazrFalcon/memmap2-rs}}
+    \field{title}{memmap2}
+    \field{journaltitle}{GitHub repository}
+    \field{year}{2026}
+  \endentry
+
+  \entry{regex}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=rl}{%
+         prefix={rust},
+         prefixi={r\bibinitperiod},
+         family={lang},
+         familyi={l\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {GitHub}%
+    }
+    \strng{namehash}{lr1}
+    \strng{fullhash}{lr1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://github.com/rust-lang/regex}}
+    \field{title}{regex}
+    \field{journaltitle}{GitHub repository}
+    \field{year}{2026}
+  \endentry
+
+  \entry{rayon}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=rr}{%
+         prefix={rayon},
+         prefixi={r\bibinitperiod},
+         family={rs},
+         familyi={r\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {GitHub}%
+    }
+    \strng{namehash}{rr1}
+    \strng{fullhash}{rr1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://github.com/rayon-rs/rayon}}
+    \field{title}{rayon}
+    \field{journaltitle}{GitHub repository}
+    \field{year}{2026}
+  \endentry
+
+  \entry{Klabnik_Nichols_Krycho_2026}{book}{}
+    \name{author}{3}{}{%
+      {{hash=KS}{%
+         family={Klabnik},
+         familyi={K\bibinitperiod},
+         given={Steve},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=NC}{%
+         family={Nichols},
+         familyi={N\bibinitperiod},
+         given={Carol},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=KC}{%
+         family={Krycho},
+         familyi={K\bibinitperiod},
+         given={Chris},
+         giveni={C\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {No Starch Press}%
+    }
+    \strng{namehash}{KSNCKC1}
+    \strng{fullhash}{KSNCKC1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{title}{The rust programming language}
+    \field{year}{2026}
+  \endentry
+
+  \entry{benchmarks}{misc}{}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://benchmarksgame-team.pages.debian.net/benchmarksgame/fastest/rust-gcc.html}}
+    \field{title}{The Computer Language Benchmarks Game}
+    \field{year}{2025}
+  \endentry
+\enddatalist
+\endinput

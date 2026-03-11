@@ -1,0 +1,339 @@
+\documentclass[letterpaper,twocolumn,10pt]{article}
+\usepackage{usenix2019_v3}
+
+% to be able to draw some self-contained figs
+\usepackage{tikz}
+\usepackage{amsmath}
+
+% inlined bib file
+\usepackage{filecontents}
+
+\usepackage[
+	backend=bibtex,
+	style=numeric,
+	sorting=none,
+	doi=false,isbn=false,url=false,eprint=false
+]{biblatex}
+\addbibresource{hw6}
+
+\newcommand{\grep}{\texttt{grep}}
+\newcommand{\grepr}{\texttt{grep -r}}
+
+
+%-------------------------------------------------------------------------------
+%-------------------------------------------------------------------------------
+\begin{document}
+%-------------------------------------------------------------------------------
+
+%don't want date printed
+\date{}
+
+% make title bold and 14 pt font (Latex default is non-bold, 16 pt)
+\title{\Large \bf Report: rewriting \texttt{grep} in Rust}
+
+%for single author (just remove % characters)
+\author{
+{Removed for blind grading}\\
+UCLA
+% copy the following lines to add more authors
+% \and
+% {\rm Name}\\
+%Name Institution
+} % end author
+
+\maketitle
+
+\vspace{-5em}
+
+%-------------------------------------------------------------------------------
+\begin{abstract}
+%-------------------------------------------------------------------------------
+This report recommends the use of Rust to write a \grep{}-like tool for internal use in Dudelsack operations.
+This report is based on Rust version 1.94.0.
+\end{abstract}
+
+
+%-------------------------------------------------------------------------------
+\section{Introduction}
+%-------------------------------------------------------------------------------
+
+We begin by discussing the high-level structure of a file pattern searcher and the key technical challenges such a program must overcome.
+We then discuss how the Rust language addresses these challenges.
+
+\grep{} is a file pattern searcher.
+Given a regular expression called the \emph{pattern}, \grep{} finds matches for the pattern within a specified set of \emph{files}~\cite{grepManPage}.
+It then returns a list of lines containing matches to the pattern.
+\grepr{} is like \grep{} except that it searches a given directory instead of files.
+\grep{} searches the given files in order and prints matches within files in order.
+\grepr{} also prints within-file matches in order, but makes no guarantees about directory traversal order.
+The searches can be controlled via \verb|--include| and \verb|--exclude| flags.
+
+Drawing inspiration from~\cite{gallantRipgrepBlog}, we will consider the following high-level structure for a multithreaded implementation of \grepr{}.
+\begin{enumerate}
+    \item
+        \emph{Identification.}
+        A number of threads traverse the input directory and identify target files.
+    \item 
+        \emph{Distribution.}
+        Target files are distributed to another pool of workers responsible for matching. 
+    \item
+        \emph{Matching.}
+        Another thread pool invokes a regex engine to search files.
+    \item
+        \emph{Printing.}
+        Matched lines are printed to stdout.
+\end{enumerate}
+Each stage involves distinct challenges, discussed below.
+
+\section{Identification}
+
+The identification stage lends itself well to multithreading, since the directory is not mutated and hence there is little shared state that could give rise to contention.
+However, a number of complications arise.
+First, directory traversal involves frequent system calls, which are costly.
+Second, directories are often imbalanced: some subdirectories have a handful of files, while others may have millions.
+A static allocation of threads to subdirectories can result in uneven load balancing.
+% Finally, symlinks may introduce cycles.
+% To counteract this, we can maintain a list of visited subdirectories.
+% However, this list would need to be shared across threads, introducing a source of contention.
+
+
+Rust is well-positioned to meet the first challenge, since its \texttt{walkdir} crate has been specifically designed to minimize system calls~\cite{walkdir}.
+The second problem can be addressed by work-stealing (whereby idle threads steal tasks from busy ones), for which a highly-optimized Rust crate also exists~\cite{deque}.
+% As for the third problem, we may assume that symlinks are relatively rare, so that a lock-based solution does not harm performance much.
+% Note that neither \grepr{} nor \texttt{ripgrep} follow symlinks by default.
+
+\section{Distribution}
+
+There are two main challenges associated with distribution.
+First, the number of files to be searched may be very large (up to 100 million).
+Storing all such filepaths could exhaust memory (if a filepath is about 256 bytes, 100 million filepaths results in about 25GB).
+To resolve this issue, tasks must be distributed to worker threads incrementally, so that files are searched as they are found~\cite{claude}.
+
+This incremental search introduces another challenge: we must balance the ``discovery'' and ``matching'' threads so that the matching threads are not idle and the discovery threads do not have to stall.
+To this end, Rust provides the \texttt{crossbeam} crate, which exposes bounded channels: sender-receiver pairs that hold a limited number of messages at a time.
+
+The second main challenge is that a given file may be very large (up to 1 GB).
+If even a few files are this large, we will quickly exhaust memory if we try to load them.
+A solution to this problem is to use \emph{incremental search}~\cite{gallantRipgrepBlog}.
+Incremental search only loads a fixed-size buffer at a time and hence does not exhaust memory.
+However, incremental search introduces many complexities (such as the need to handle lines that straddle buffers, which is likely to be the case with very long lines) and hence increases the complexity of our proposed application.
+
+Another possible solution is to memory-map the searched files.
+This entails loading the file into RAM one ``page'' at a time; the paging is handled by the OS~\cite{memmap}.
+This ensures that the whole file is accessed without ever occupying more than a few pages of memory.
+Rust provides a memory-mapping crate \texttt{memmap2}.
+While memory mapping can be unsafe in certain multithreaded contexts, this should not be a problem in our application, since no file is accessed by more than one thread.
+
+
+\section{Matching}
+
+Regex matching is the heart of any file pattern searcher.
+Some regex engines implement backtracking, which can result in exponential slowdowns on certain patterns and strings.
+Our Rust implementation can rely on the \texttt{regex} crate, however, which uses finite automata to compute matches~\cite{regex}.
+This ensures that \texttt{find}s run in time linear in the size of the string.
+
+If we are grepping in a single very large file, the parallelism introduced thus far will not help.
+Instead, we must implement within-file parallelism to search over a given file in parallel.
+This can be done using the Rust crate \texttt{rayon}, which guarantees race-free execution~\cite{rayon}.
+
+
+\section{Printing}
+
+As mentioned above, \grep{} and \grepr{} preserve line and file ordering.
+This poses a challenge for our multithreaded implementation, since we cannot simply print matches as they are found.
+
+A solution is to simply let each thread write its matches to a dedicated buffer, which is dumped to stdout when the thread finishes searching a file~\cite{gallantRipgrepBlog}.
+To prevent out-of-order printing, the thread needs to acquire a lock on stdout while it is printing.
+However, this is not as costly as locking stdout during search.
+
+\section{Review and Comparison}
+
+Having discussed how different Rust features would help us approach various challenges, we now assess the language's suitability and draw comparisons with C.
+
+\emph{Reliability.} In a multithreaded application handling multiple possibly large files, two reliability concerns stand out: memory safety and thread safety.
+Rust excels at both.
+Rust's memory system is centered on the concept of ownership.
+A value can only have a single owner.
+Temporary references \emph{borrow} from the owner of a value, but only one such reference can mutate the object at a given time.
+When the owner of a value goes out of scope, the value is automatically freed, preventing dangling pointers and double frees (which are a pervasive risk in C programs)~\cite{Klabnik_Nichols_Krycho_2026}.
+In addition, Rust's type system catches data races at compile time by preventing thread-unsafe objects to be passed across threads.
+By contrast, such races must be managed manually in C programs.
+Thus, Rust enjoys a clear reliability advantage over C.
+
+\emph{Performance.} In benchmarks, Rust performance is comparable to C~\cite{benchmarks}.
+Thus, we do not expect significant performance improvement from using Rust over C.
+However, since C is very fast, we do expect that our Rust implementation will be fast as well---faster than in any interpreted language, for instance.
+
+\emph{Ease of use.} While Rust possesses many desirable modern language features (from a healthy tooling ecosystem to useful language constructs like pattern matching), its memory model (ownership and borrowing) is reputed to be difficult to learn~\cite{claude}.
+This is likely to slow development time, especially if the team is already familiar with the C memory model.
+In addition, Rust tends to compile more slowly than C, which could slow iterative development (although incremental compilation can partly mitigate this issue).
+
+\emph{Generality.} Rust as a language supports fairly general development: it functions as a systems language, with low-level control over memory and OS resources, but it also provides high-level abstractions and a range of libraries relevant to this project (filesystem traversal, concurrency, etc.)~\cite{Klabnik_Nichols_Krycho_2026}.
+Since Rust code tends to be larger than comparable C code, Rust may not be suitable for running on embedded devices or microcontrollers, where memory may be sparse.
+But our implementation is unlikely to run on such machines.
+Thus, it seems likely that Rust is general enough for the kinds of purposes to which our application will be put.
+
+\emph{Flexibility.} Rust supports flexible code through its package manager (\texttt{cargo}) and crate system.
+These make it relatively easy to swap, e.g., regex engines should the need arise.
+In addition, Rust's strong type system and ownership system can help with refactoring.
+Refactors that would break thread safety or introduce memory leaks are flagged as such by the language system.
+By contrast, C does not have a comparable package ecosystem and refactoring is more error-prone.
+However, the C ecosystem is more mature and hence could contain useful libraries not implemented in Rust.
+
+\emph{Security.} Rust provides an overall safer experience than C.
+Rust's memory management eliminates the most common safety vulnerabilities in C programs: buffer overflows.
+The aforementioned thread-safety features also contribute to the application's safety.
+
+\section{Recommendation}
+
+In light of the reliability and safety advantages discussed in the previous section, and of Rust's generally high performance, we recommend the use of Rust for the grep rewrite.
+
+
+%-------------------------------------------------------------------------------
+% \bibliographystyle{plain}
+% \bibliography{hw6}
+\printbibliography{}
+
+\section*{Claude Logs}
+
+Me: [assignment description]. In the first stage, when we are identifying which files are to be searched, what are issues that can arise due to parallelism?
+
+Claude: Key parallelism issues during the file discovery/enumeration phase:
+
+Directory traversal races --- if files are being created or deleted while you're walking the directory tree, different threads may see inconsistent snapshots. One thread might enqueue a file that's deleted before another thread opens it.
+
+Symlink cycles --- a recursive traversal needs to track visited inodes to avoid infinite loops. With multiple threads walking simultaneously, that visited-set becomes shared mutable state requiring synchronization.
+
+Work distribution imbalance --- you don't know file sizes until you stat them (or open them). A naive strategy of assigning one file per thread leads to severe load imbalance given the problem description (files ranging from a few lines to a billion+). You need a dynamic work-stealing or priority queue approach.
+
+Inode/metadata contention --- mass parallel stat() calls on the same filesystem can saturate the inode cache or overwhelm a network filesystem, actually making parallel traversal slower than sequential.
+
+File descriptor exhaustion --- if threads greedily open files as they discover them, you can hit the process RLIMIT\_NOFILE limit. Discovery and searching need to be decoupled with backpressure.
+
+Output ordering --- if the requirement is to emit matches in the same order as grep -r (depth-first, deterministic), parallel discovery makes this harder since you lose the natural ordering of traversal.
+
+The core tension is that file discovery is largely I/O-bound and sequential by nature (directory reads are serial on most filesystems), so the parallelism payoff is mostly in the search phase, not discovery.
+
+Me: why would this task lend itself to multithreading?
+
+Claude: A few reasons:
+The workload is naturally partitioned. Each file is independent --- searching file A has no dependency on file B. This is an embarrassingly parallel problem at the file level.
+CPU and I/O can overlap. While one thread is blocked waiting on I/O (reading from disk), another can be doing regex matching on already-loaded data. Threads let you hide I/O latency.
+Large files benefit from intra-file parallelism. A billion-line file can be split into chunks, with each thread searching a chunk concurrently. This wouldn't be possible with multiple processes without complex shared-memory setup --- threads share the same address space, so one thread can mmap the file and others can search different regions of it cheaply.
+Shared state is limited. Threads mostly operate on disjoint data (their assigned chunk/file). The only shared state is the work queue and output buffer, which are well-understood synchronization problems. This makes the threading model relatively clean.
+Contrast with multiprocessing: spawning 100M processes is obviously untenable, and even a process pool has higher overhead per unit of work and makes intra-file parallelism awkward. Threads are the right granularity here.
+
+Me: in a word, what is work-stealing?
+
+Claude: Load balancing.
+
+Me: ok, a few more words
+
+Claude: Idle threads steal tasks from the queues of busy threads, so no thread sits idle while work remains.
+
+Me: how does ripgrep get around the symlink problem?
+
+Claude: ripgrep simply doesn't follow symlinks by default --- it ignores them unless you explicitly pass `--follow`. The problem is sidestepped by policy rather than solved technically.
+
+Me: what if you pass follow?
+
+Claude: It tracks visited inodes in a shared set, and if it detects a cycle (i.e., it's about to visit an inode it's already seen), it skips it and warns you.
+
+Me: how does it solve the problem of concurrent access to the shared set?
+
+Claude: A mutex protecting the inode set --- threads lock before checking/inserting, then unlock. It's a small, infrequent operation so contention is minimal.
+
+Me: does grep follow symlinks?
+
+Claude: Yes, but not by default. You need `-r` (or `--recursive`) combined with `-L` / `--dereference-recursive` to follow symlinks. Plain `grep -r` skips them.
+
+Me: what does pooling mean?
+
+Claude: Pre-creating a fixed set of resources (threads, DB connections, file descriptors) and reusing them, rather than paying the creation/teardown cost for each unit of work.
+
+Me: what issues could arise from storing all filepaths in memory before processing them?
+
+Claude: With 100 million files, just storing the paths exhausts memory --- even at 256 bytes average per path, that's 25 GB before you've read a single byte of content.
+
+The fix is to use the discovery phase as a producer feeding a bounded work queue, so you only hold a small buffer of paths in memory at any time.
+
+Me: any aspects of Rust that are particularly helpful for the bounded work queue?
+
+Claude: `std::sync::mpsc` --- Rust's built-in multi-producer, single-consumer channel. You can bound it with a fixed capacity, which naturally applies backpressure: the directory walker blocks when the queue is full, preventing unbounded memory growth.
+
+For multi-consumer (multiple worker threads pulling from the same queue), the `crossbeam` crate provides bounded channels with MPMC support.
+
+Me: what's the difference between using a crossbeam channel vs a simple queue?
+
+Claude: A simple queue (e.g. `Mutex<VecDeque>`) requires you to manually handle synchronization, blocking when empty/full, and waking waiting threads. 
+
+Crossbeam's channel gives you all of that built-in --- blocking send/recv, backpressure, and thread wakeups --- plus it's implemented with lock-free algorithms where possible, so it's faster under contention.
+
+Me: what's the difference between backtracking and finite automata regex engines?
+
+Claude: **Backtracking** (PCRE, Python `re`): tries each possibility recursively, backtracks on failure. Supports features like backreferences and lookaheads, but worst-case is exponential --- certain inputs cause catastrophic backtracking.
+
+**Finite automata** (ripgrep, RE2): converts the regex to an NFA/DFA at compile time, then runs the input through it in a single linear pass. Worst-case is $O(n)$ in input length, but can't support backreferences.
+
+For grep's use case --- scanning massive inputs --- the $O(n)$ guarantee is critical. Ripgrep uses the `regex` crate which is FA-based, which is a significant performance advantage over PCRE-based tools.
+
+Me: what's a case that a backtracking engine would catch but a FA based one would miss?
+
+Claude: Backreferences --- e.g. the regex \verb|(foo)\1| matching "foofoo" (the same text captured in group 1 repeated). A DFA can't represent this because it would require infinite states to track all possible captured strings.
+
+Me: make sure to read this writeup on ripgrep:
+https://burntsushi.net/ripgrep/\#anatomy-of-a-grep
+
+Claude: Read. Key points relevant to our discussion:
+
+**Literal optimizations** are a huge deal --- ripgrep extracts literals from regexes and uses `memchr` with a "rarest byte" heuristic, or the SIMD **Teddy algorithm** for multiple literals, to skip most of the input before the regex engine ever runs.
+
+**Don't search line-by-line** --- ripgrep searches large buffers at once (not line by line), which avoids per-line overhead. Memory maps are used for single large files but *not* for many small files (where mmap overhead dominates).
+
+**Printing** --- threads buffer output in memory per-file, then serialize the dump to stdout. This lets search proceed in parallel without interleaved output.
+
+**Work distribution** --- ripgrep uses a lock-free Chase-Lev work-stealing queue, while every other tool benchmarked uses a mutex-protected queue.
+
+**Memory maps vs. intermediate buffers** --- counterintuitively, mmap is *slower* for many small files due to kernel bookkeeping overhead, but faster for a single large file.
+
+Anything specific from the article you want to dig into?
+
+Me: how is the printing serialized?
+
+Claude: Each search thread writes its results into a **per-file in-memory buffer** rather than directly to stdout. Once a thread finishes searching a file, it acquires a lock on the printer, dumps the buffer to stdout, then releases the lock.
+
+This way, the lock is only held during a fast memory copy, not during the actual search --- so threads search in parallel, and serialization is cheap.
+
+Me: what are issues associated with large files in this implementation?
+
+Claude: If a large file has many matches, the in-memory buffer grows proportionally --- in the worst case (every line matches a 1GB file), you're buffering nearly 1GB of output per thread. The article acknowledges this and notes ripgrep sidesteps it for single-file or stdin searches by writing directly to stdout instead, since there's no ordering concern with one file.
+
+Me: what about in the application more broadly? does the whole file need to be stored into memory
+
+Claude: No --- ripgrep uses **incremental search** with a fixed-size intermediate buffer. It reads a chunk, searches it, then reuses the buffer. The whole file never needs to be in memory at once.
+
+The complication is handling lines that span buffer boundaries --- you have to carry over the incomplete line tail into the next read. The article calls this implementation "ghoulish" but necessary for correctness and performance on large files.
+
+Me: what is the memory map solution to this problem?
+
+Claude: The OS maps the file into the process's virtual address space, but doesn't actually load it into RAM --- pages are loaded on demand as you access them, and the OS can evict pages it hasn't touched recently. So you can "search" a 10GB file while only keeping a small working set in physical RAM at any time, with the OS handling paging transparently.
+
+Me: how does the solution compare?
+
+Claude: For large files, mmap is actually competitive or better than incremental buffering --- the article shows this in the single-file benchmarks, where `rg (mmap)` beats `rg (no mmap)` by ~25%.
+
+The problem is many small files, where you pay mmap setup/teardown overhead per file. For large files that overhead is amortized over much more data, and you get the OS page management for free instead of doing your own buffer bookkeeping. That's why ripgrep uses mmap for single/few large files and incremental buffers for directory searches.
+
+Me: explain in simple terms what memory mapping does?
+
+Claude: Your program says "treat this file as if it were a byte array in memory." The OS wires up that array to the file on disk, but only actually loads pages into RAM when you touch them --- on demand, transparently. From your code's perspective, the file is just a pointer you can read like any array.
+
+Me: so you might get slower access if you index into a new part of the file (since the os has to load that page in memory) but you only ever load a small number of pages into memory, so you don't have to deal with the size issue?
+
+Claude: Exactly right. The tradeoff is latency (page faults on first access) versus memory usage (only resident pages consume RAM). For sequential scanning like grep, the OS can also prefetch pages ahead of your read position, which mitigates the page fault cost significantly.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\end{document}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%  LocalWords:  endnotes includegraphics fread ptr nobj noindent
+%%  LocalWords:  pdflatex acks
