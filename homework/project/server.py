@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import logging
 import os
 import re
@@ -66,7 +67,8 @@ async def handle_connection(reader, writer):
 
 
 async def handle_at(writer, parts):
-    await validate_parts(parts, message_type='at', writer=writer)
+    if not await validate_parts(parts, message_type='at', writer=writer):
+        return
     logging.info(f'Received AT from {writer.get_extra_info("peername")}')
     client_id = parts[3]
     timestamp = float(parts[-1])
@@ -81,7 +83,8 @@ async def handle_at(writer, parts):
 
 
 async def handle_iamat(writer, parts):
-    await validate_parts(parts, message_type='iamat', writer=writer)
+    if not await validate_parts(parts, message_type='iamat', writer=writer):
+        return
     logging.info(f'Received IAMAT from {writer.get_extra_info("peername")}')
     response = make_AT_message(parts)  # response includes newline
 
@@ -98,9 +101,17 @@ async def handle_iamat(writer, parts):
 
 
 async def handle_whatsat(writer, parts):
-    # AT response to client
+    if not await validate_parts(parts, message_type='whatsat', writer=writer):
+        return
+
+    # validate client id
     client_id = parts[1]
     global LOCATIONS
+    if client_id not in LOCATIONS:
+        await handle_invalid_command(writer, parts)
+        return
+
+    # AT response to client
     client_location = LOCATIONS[client_id]
     response = client_location['message']
 
@@ -113,7 +124,7 @@ async def handle_whatsat(writer, parts):
     radius = parts[2]
     bound = parts[3]
     api_response = await api_call(lat, long, radius, bound)
-    writer.write(str(api_response).encode())
+    writer.write((api_response + '\n\n').encode())
     await writer.drain()
     logging.info('Received API response:')
     logging.info(api_response)
@@ -131,12 +142,20 @@ async def validate_parts(parts, message_type, writer):
             case 'at':
                 assert parts[0] == 'AT'
                 assert len(parts) == 6
+                float(parts[-1])  # timestamp
             case 'iamat':
                 assert parts[0] == 'IAMAT'
                 assert len(parts) == 4
-
-    except AssertionError:
+                float(parts[-1])  # timestamp
+            case 'whatsat':
+                assert parts[0] == 'WHATSAT'
+                assert len(parts) == 4
+                float(parts[2])  # radius
+                int(parts[3])  # bound
+        return True
+    except (AssertionError, IndexError, ValueError):
         await handle_invalid_command(writer, parts)
+        return False
 
 
 def make_AT_message(parts):
@@ -172,25 +191,34 @@ def timestamp_stale(cached_location, timestamp):
     return cached_location['timestamp'] < timestamp
 
 
-async def flood(message):
-    global CONNECTIONS
-    for neighbor_name, writer in CONNECTIONS.items():
-        if writer is not None:
+async def send_to_neighbor(neighbor_name, message):
+    writer = CONNECTIONS.get(neighbor_name)
+    if writer is None:
+        await connect_to_neighbor(neighbor_name)
+        writer = CONNECTIONS.get(neighbor_name)
+    if writer is not None:
+        try:
             writer.write(message.encode())
             await writer.drain()
-        else:
-            await connect_to_neighbor(neighbor_name)
-            writer = CONNECTIONS.get(neighbor_name)
-            if writer is not None:
-                writer.write(message.encode())
-                await writer.drain()
+        except Exception as e:
+            logging.error(f'Failed to send to {neighbor_name}: {e}')
+            CONNECTIONS[neighbor_name] = None
+
+
+async def flood(message):
+    tasks = [send_to_neighbor(name, message) for name in NEIGHBORS[SERVER_NAME]]
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def api_call(lat, long, radius, bound):
-    params = {'location': lat + ',' + long, 'radius': radius * 1000, 'key': API_KEY}
-    # url = API_URL + f'location={lat},{long}&radius={radius}&key={API_KEY}'
+    params = {
+        'location': lat + ',' + long,
+        'radius': int(radius) * 1000,
+        'key': API_KEY,
+    }
     async with SESSION.get(API_URL, params=params) as resp:
-        resp = await resp.text()
+        resp = await resp.json()
+        resp = json.dumps(resp['results'][: int(bound)], indent=4)
 
     return resp
 
@@ -198,8 +226,11 @@ async def api_call(lat, long, radius, bound):
 async def connect_to_neighbors():
     global SERVER_NAME
     global NEIGHBORS
+    global CONNECTIONS
     for neighbor_name in NEIGHBORS[SERVER_NAME]:
-        await connect_to_neighbor(neighbor_name)
+        if neighbor_name not in CONNECTIONS:
+            CONNECTIONS[neighbor_name] = None
+    await asyncio.gather(*(connect_to_neighbor(n) for n in NEIGHBORS[SERVER_NAME]))
 
 
 async def connect_to_neighbor(neighbor_name):
@@ -241,21 +272,19 @@ async def main():
         level=logging.INFO,
     )
 
-    # start server first so neighbors can connect to us
-    port = PORT_DICT[SERVER_NAME]
-    server = await asyncio.start_server(handle_connection, IP_ADDRESS, port)
-
     # start aiohttp session
     global SESSION
-    SESSION = aiohttp.ClientSession()
+    async with aiohttp.ClientSession() as session:
+        SESSION = session
 
-    # connect to neighbors in background
-    asyncio.create_task(connect_to_neighbors())
+        port = PORT_DICT[SERVER_NAME]
+        server = await asyncio.start_server(handle_connection, IP_ADDRESS, port)
 
-    async with server:
-        await server.serve_forever()
+        # connect to neighbors in background
+        asyncio.create_task(connect_to_neighbors())
 
-    await SESSION.close()
+        async with server:
+            await server.serve_forever()
 
 
 if __name__ == '__main__':
