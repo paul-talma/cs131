@@ -10,7 +10,7 @@ import aiohttp
 
 SERVER_NAME = ''
 API_URL = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?'
-API_KEY = 'AIzaSyCEp51AwMi4zLnCSRZyzu3fwpExlnQNqgs'
+API_KEY = None
 
 PORT_DICT = {
     'Bailey': 10000,
